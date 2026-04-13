@@ -1,3 +1,5 @@
+# semantics.py
+
 # This file is part of the materials accompanying the book
 # "Mathematical Logic through Python" by Gonczarowski and Nisan,
 # Cambridge University Press. Book site: www.LogicThruPython.org
@@ -75,7 +77,7 @@ class Model(Generic[T]):
             assert is_relation(relation)
             relation_interpretation = relation_interpretations[relation]
             if len(relation_interpretation) == 0:
-                arity = -1 # any
+                arity = -1 
             else:
                 some_arguments = next(iter(relation_interpretation))
                 arity = len(some_arguments)
@@ -152,9 +154,8 @@ class Model(Generic[T]):
             return self.constant_interpretations[term.root]
         if is_variable(term.root):
             return assignment[term.root]
-        # function
-        args = tuple(self.evaluate_term(a, assignment) for a in term.arguments)
-        return self.function_interpretations[term.root][args]
+        evaluated_args = tuple(self.evaluate_term(a, assignment) for a in term.arguments)
+        return self.function_interpretations[term.root][evaluated_args]
 
     def evaluate_formula(self, formula: Formula,
                          assignment: Mapping[str, T] = frozendict()) -> bool:
@@ -185,34 +186,39 @@ class Model(Generic[T]):
                    self.relation_arities[relation] in {-1, arity}
         # Task 7.8
         if is_equality(formula.root):
-            left_val = self.evaluate_term(formula.arguments[0], assignment)
-            right_val = self.evaluate_term(formula.arguments[1], assignment)
-            return left_val == right_val
+            v1 = self.evaluate_term(formula.arguments[0], assignment)
+            v2 = self.evaluate_term(formula.arguments[1], assignment)
+            return v1 == v2
         if is_relation(formula.root):
             args = tuple(self.evaluate_term(t, assignment) for t in formula.arguments)
             return args in self.relation_interpretations[formula.root]
         if is_unary(formula.root):
             return not self.evaluate_formula(formula.first, assignment)
         if is_binary(formula.root):
-            first = self.evaluate_formula(formula.first, assignment)
-            second = self.evaluate_formula(formula.second, assignment)
+            left = self.evaluate_formula(formula.first, assignment)
+            right = self.evaluate_formula(formula.second, assignment)
             if formula.root == '&':
-                return first and second
+                return left and right
             if formula.root == '|':
-                return first or second
+                return left or right
             if formula.root == '->':
-                return (not first) or second
+                return (not left) or right
         if is_quantifier(formula.root):
             var = formula.variable
-            for elem in self.universe:
-                new_assign = dict(assignment)
-                new_assign[var] = elem
-                val = self.evaluate_formula(formula.statement, new_assign)
-                if formula.root == 'A' and not val:
-                    return False
-                if formula.root == 'E' and val:
-                    return True
-            return formula.root == 'A'
+            if formula.root == 'A':
+                for elem in self.universe:
+                    new_assign = dict(assignment)
+                    new_assign[var] = elem
+                    if not self.evaluate_formula(formula.statement, new_assign):
+                        return False
+                return True
+            else:  
+                for elem in self.universe:
+                    new_assign = dict(assignment)
+                    new_assign[var] = elem
+                    if self.evaluate_formula(formula.statement, new_assign):
+                        return True
+                return False
         raise ValueError("Unknown formula root")
 
     def is_model_of(self, formulas: AbstractSet[Formula]) -> bool:

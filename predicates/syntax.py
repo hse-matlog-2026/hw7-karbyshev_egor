@@ -116,8 +116,8 @@ class Term:
         # Task 7.1
         if self.arguments is None:
             return self.root
-        args_repr = ','.join(repr(arg) for arg in self.arguments)
-        return f'{self.root}({args_repr})'
+        args_str = ','.join(repr(a) for a in self.arguments)
+        return f'{self.root}({args_str})'
 
     def __eq__(self, other: object) -> bool:
         """Compares the current term with the given one.
@@ -165,12 +165,12 @@ class Term:
         while i < len(string) and (string[i].isalnum() or string[i] == '_'):
             i += 1
         if i == 0:
-            raise ValueError("Invalid term")
+            raise ValueError("Term expected")
         name = string[:i]
         rest = string[i:]
         if is_constant(name) or is_variable(name):
             return Term(name), rest
-        if is_function(name):
+        elif is_function(name):
             if not rest or rest[0] != '(':
                 raise ValueError("Expected '(' after function name")
             rest = rest[1:]
@@ -185,7 +185,8 @@ class Term:
             if not rest or rest[0] != ')':
                 raise ValueError("Unclosed function arguments")
             return Term(name, args), rest[1:]
-        raise ValueError("Invalid term")
+        else:
+            raise ValueError("Invalid term")
 
     @staticmethod
     def parse(string: str) -> Term:
@@ -200,7 +201,7 @@ class Term:
         # Task 7.3b
         term, rest = Term._parse_prefix(string)
         if rest != '':
-            raise ValueError("Unexpected trailing characters")
+            raise ValueError("Extra characters after term")
         return term
 
     def constants(self) -> Set[str]:
@@ -213,8 +214,8 @@ class Term:
         if self.arguments is None:
             return {self.root} if is_constant(self.root) else set()
         consts = set()
-        for arg in self.arguments:
-            consts.update(arg.constants())
+        for a in self.arguments:
+            consts.update(a.constants())
         return consts
 
     def variables(self) -> Set[str]:
@@ -226,10 +227,10 @@ class Term:
         # Task 7.5b
         if self.arguments is None:
             return {self.root} if is_variable(self.root) else set()
-        vars_set = set()
-        for arg in self.arguments:
-            vars_set.update(arg.variables())
-        return vars_set
+        vs = set()
+        for a in self.arguments:
+            vs.update(a.variables())
+        return vs
 
     def functions(self) -> Set[Tuple[str, int]]:
         """Finds all function names in the current term, along with their
@@ -242,10 +243,10 @@ class Term:
         # Task 7.5c
         if self.arguments is None:
             return set()
-        funcs = {(self.root, len(self.arguments))}
-        for arg in self.arguments:
-            funcs.update(arg.functions())
-        return funcs
+        fs = {(self.root, len(self.arguments))}
+        for a in self.arguments:
+            fs.update(a.functions())
+        return fs
 
     def substitute(self, substitution_map: Mapping[str, Term],
                    forbidden_variables: AbstractSet[str] = frozenset()) -> Term:
@@ -435,7 +436,7 @@ class Formula:
         if is_equality(self.root):
             return f'{repr(self.arguments[0])}={repr(self.arguments[1])}'
         if is_relation(self.root):
-            args_repr = ','.join(repr(term) for term in self.arguments)
+            args_repr = ','.join(repr(t) for t in self.arguments)
             return f'{self.root}({args_repr})'
         if is_unary(self.root):
             return f'~{repr(self.first)}'
@@ -487,56 +488,55 @@ class Formula:
             that entire name (and not just a part of it, such as ``'f(y)=x1'``).
         """
         # Task 7.4a
-        s = string.lstrip()
-        if not s:
-            raise ValueError("Empty formula string")
-        # Parenthesised formula or unary
-        if s[0] == '(':
-            inner, rest = Formula._parse_prefix(s[1:])
-            # Look for binary operator after inner
-            rest = rest.lstrip()
-            if rest and is_binary(rest[0]) and len(rest) >= 1:
-                op = rest[0]
-                right, rest = Formula._parse_prefix(rest[1:])
+        def parse_atomic(s: str) -> Tuple[Formula, str]:
+            s = s.lstrip()
+            if not s:
+                raise ValueError("Empty string")
+            # Parentheses
+            if s[0] == '(':
+                inner, rest = Formula._parse_prefix(s[1:])
                 rest = rest.lstrip()
-                if not rest or rest[0] != ')':
-                    raise ValueError("Expected ')' after binary operator")
-                return Formula(op, inner, right), rest[1:]
-            elif rest and rest[0] == ')':
-                # Just a parenthesised formula without binary operator
-                return inner, rest[1:]
-            else:
-                raise ValueError("Malformed parenthesised expression")
-        # Unary operator
-        elif s[0] == '~':
-            sub, rest = Formula._parse_prefix(s[1:])
-            return Formula('~', sub), rest
-        # Quantifier
-        elif is_quantifier(s[0]):
-            quant = s[0]
-            i = 1
-            while i < len(s) and s[i].isalnum():
-                i += 1
-            var = s[1:i]
-            if not is_variable(var):
-                raise ValueError("Invalid variable in quantifier")
-            if i >= len(s) or s[i] != '[':
-                raise ValueError("Expected '[' after quantifier variable")
-            sub, rest = Formula._parse_prefix(s[i+1:])
-            rest = rest.lstrip()
-            if not rest or rest[0] != ']':
-                raise ValueError("Expected ']' after quantified formula")
-            return Formula(quant, var, sub), rest[1:]
-        else:
-            # Try to parse a term followed by '=' or a relation
+                if rest and is_binary(rest[0]):
+                    op = rest[0]
+                    right, rest = Formula._parse_prefix(rest[1:])
+                    rest = rest.lstrip()
+                    if not rest or rest[0] != ')':
+                        raise ValueError("Expected ')'")
+                    return Formula(op, inner, right), rest[1:]
+                elif rest and rest[0] == ')':
+                    return inner, rest[1:]
+                else:
+                    raise ValueError("Malformed parenthesised formula")
+            # Unary
+            if s[0] == '~':
+                sub, rest = Formula._parse_prefix(s[1:])
+                return Formula('~', sub), rest
+            # Quantifier
+            if is_quantifier(s[0]):
+                q = s[0]
+                i = 1
+                while i < len(s) and s[i].isalnum():
+                    i += 1
+                var = s[1:i]
+                if not is_variable(var):
+                    raise ValueError("Invalid variable in quantifier")
+                if i >= len(s) or s[i] != '[':
+                    raise ValueError("Expected '['")
+                sub, rest = Formula._parse_prefix(s[i+1:])
+                rest = rest.lstrip()
+                if not rest or rest[0] != ']':
+                    raise ValueError("Expected ']'")
+                return Formula(q, var, sub), rest[1:]
+            # Equality or relation
+            # Try to parse a term first
             try:
-                term1, rest = Term._parse_prefix(s)
+                t1, rest = Term._parse_prefix(s)
                 if rest and rest[0] == '=':
-                    term2, rest = Term._parse_prefix(rest[1:])
-                    return Formula('=', [term1, term2]), rest
+                    t2, rest = Term._parse_prefix(rest[1:])
+                    return Formula('=', [t1, t2]), rest
             except ValueError:
                 pass
-            # Parse relation name and arguments
+            # Relation
             i = 0
             while i < len(s) and s[i].isalnum():
                 i += 1
@@ -556,10 +556,22 @@ class Formula:
                 if rest and rest[0] == ',':
                     rest = rest[1:]
                 elif not rest or rest[0] != ')':
-                    raise ValueError("Expected ',' or ')' in relation arguments")
+                    raise ValueError("Expected ',' or ')'")
             if not rest or rest[0] != ')':
                 raise ValueError("Unclosed relation arguments")
             return Formula(rel, args), rest[1:]
+
+        # Parse a sequence of formulas connected by binary operators (left-associative)
+        left, rest = parse_atomic(string)
+        while rest:
+            rest = rest.lstrip()
+            if rest and is_binary(rest[0]):
+                op = rest[0]
+                right, rest = parse_atomic(rest[1:])
+                left = Formula(op, left, right)
+            else:
+                break
+        return left, rest
 
     @staticmethod
     def parse(string: str) -> Formula:
@@ -585,15 +597,15 @@ class Formula:
         """
         # Task 7.6a
         if hasattr(self, 'arguments') and self.arguments is not None:
-            consts = set()
+            c = set()
             for term in self.arguments:
-                consts.update(term.constants())
-            return consts
+                c.update(term.constants())
+            return c
         elif hasattr(self, 'first') and self.first is not None:
-            consts = self.first.constants()
+            c = self.first.constants()
             if hasattr(self, 'second') and self.second is not None:
-                consts.update(self.second.constants())
-            return consts
+                c.update(self.second.constants())
+            return c
         elif hasattr(self, 'statement') and self.statement is not None:
             return self.statement.constants()
         else:
@@ -607,19 +619,19 @@ class Formula:
         """
         # Task 7.6b
         if hasattr(self, 'arguments') and self.arguments is not None:
-            vars_set = set()
+            vs = set()
             for term in self.arguments:
-                vars_set.update(term.variables())
-            return vars_set
+                vs.update(term.variables())
+            return vs
         elif hasattr(self, 'first') and self.first is not None:
-            vars_set = self.first.variables()
+            vs = self.first.variables()
             if hasattr(self, 'second') and self.second is not None:
-                vars_set.update(self.second.variables())
-            return vars_set
+                vs.update(self.second.variables())
+            return vs
         elif hasattr(self, 'statement') and self.statement is not None:
-            vars_set = self.statement.variables()
-            vars_set.add(self.variable)
-            return vars_set
+            vs = self.statement.variables()
+            vs.add(self.variable)
+            return vs
         else:
             return set()
 
@@ -632,19 +644,19 @@ class Formula:
         """
         # Task 7.6c
         if hasattr(self, 'arguments') and self.arguments is not None:
-            free = set()
+            fv = set()
             for term in self.arguments:
-                free.update(term.variables())
-            return free
+                fv.update(term.variables())
+            return fv
         elif hasattr(self, 'first') and self.first is not None:
-            free = self.first.free_variables()
+            fv = self.first.free_variables()
             if hasattr(self, 'second') and self.second is not None:
-                free.update(self.second.free_variables())
-            return free
+                fv.update(self.second.free_variables())
+            return fv
         elif hasattr(self, 'statement') and self.statement is not None:
-            free = self.statement.free_variables()
-            free.discard(self.variable)
-            return free
+            fv = self.statement.free_variables()
+            fv.discard(self.variable)
+            return fv
         else:
             return set()
 
@@ -657,17 +669,17 @@ class Formula:
             all function names used in the current formula.
         """
         # Task 7.6d
-        funcs = set()
+        fs = set()
         if hasattr(self, 'arguments') and self.arguments is not None:
             for term in self.arguments:
-                funcs.update(term.functions())
+                fs.update(term.functions())
         elif hasattr(self, 'first') and self.first is not None:
-            funcs.update(self.first.functions())
+            fs.update(self.first.functions())
             if hasattr(self, 'second') and self.second is not None:
-                funcs.update(self.second.functions())
+                fs.update(self.second.functions())
         elif hasattr(self, 'statement') and self.statement is not None:
-            funcs.update(self.statement.functions())
-        return funcs
+            fs.update(self.statement.functions())
+        return fs
 
     def relations(self) -> Set[Tuple[str, int]]:
         """Finds all relation names in the current formula, along with their
@@ -678,19 +690,17 @@ class Formula:
             all relation names used in the current formula.
         """
         # Task 7.6e
-        rels = set()
+        rs = set()
         if hasattr(self, 'arguments') and self.arguments is not None:
-            if is_equality(self.root):
-                pass
-            else:
-                rels.add((self.root, len(self.arguments)))
+            if not is_equality(self.root):
+                rs.add((self.root, len(self.arguments)))
         elif hasattr(self, 'first') and self.first is not None:
-            rels.update(self.first.relations())
+            rs.update(self.first.relations())
             if hasattr(self, 'second') and self.second is not None:
-                rels.update(self.second.relations())
+                rs.update(self.second.relations())
         elif hasattr(self, 'statement') and self.statement is not None:
-            rels.update(self.statement.relations())
-        return rels
+            rs.update(self.statement.relations())
+        return rs
 
     def substitute(self, substitution_map: Mapping[str, Term],
                    forbidden_variables: AbstractSet[str] = frozenset()) -> \
