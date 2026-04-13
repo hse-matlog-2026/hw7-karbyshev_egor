@@ -37,7 +37,7 @@ class ForbiddenVariableError(Exception):
         assert is_variable(variable_name)
         self.variable_name = variable_name
 
-@lru_cache(maxsize=100) # Cache the return value of is_constant
+@lru_cache(maxsize=100)
 def is_constant(string: str) -> bool:
     """Checks if the given string is a constant name.
 
@@ -51,7 +51,7 @@ def is_constant(string: str) -> bool:
               (string[0] >= 'a' and string[0] <= 'e')) and \
              string.isalnum()) or string == '_'
 
-@lru_cache(maxsize=100) # Cache the return value of is_variable
+@lru_cache(maxsize=100)
 def is_variable(string: str) -> bool:
     """Checks if the given string is a variable name.
 
@@ -63,7 +63,7 @@ def is_variable(string: str) -> bool:
     """
     return string[0] >= 'u' and string[0] <= 'z' and string.isalnum()
 
-@lru_cache(maxsize=100) # Cache the return value of is_function
+@lru_cache(maxsize=100)
 def is_function(string: str) -> bool:
     """Checks if the given string is a function name.
 
@@ -285,7 +285,7 @@ class Term:
         for variable in forbidden_variables:
             assert is_variable(variable)
 
-@lru_cache(maxsize=100) # Cache the return value of is_equality
+@lru_cache(maxsize=100)
 def is_equality(string: str) -> bool:
     """Checks if the given string is the equality relation.
 
@@ -298,7 +298,7 @@ def is_equality(string: str) -> bool:
     """
     return string == '='
 
-@lru_cache(maxsize=100) # Cache the return value of is_relation
+@lru_cache(maxsize=100)
 def is_relation(string: str) -> bool:
     """Checks if the given string is a relation name.
 
@@ -310,7 +310,7 @@ def is_relation(string: str) -> bool:
     """
     return string[0] >= 'F' and string[0] <= 'T' and string.isalnum()
 
-@lru_cache(maxsize=100) # Cache the return value of is_unary
+@lru_cache(maxsize=100)
 def is_unary(string: str) -> bool:
     """Checks if the given string is a unary operator.
 
@@ -322,7 +322,7 @@ def is_unary(string: str) -> bool:
     """
     return string == '~'
 
-@lru_cache(maxsize=100) # Cache the return value of is_binary
+@lru_cache(maxsize=100)
 def is_binary(string: str) -> bool:
     """Checks if the given string is a binary operator.
 
@@ -334,7 +334,7 @@ def is_binary(string: str) -> bool:
     """
     return string == '&' or string == '|' or string == '->'
 
-@lru_cache(maxsize=100) # Cache the return value of is_quantifier
+@lru_cache(maxsize=100)
 def is_quantifier(string: str) -> bool:
     """Checks if the given string is a quantifier.
 
