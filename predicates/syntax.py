@@ -187,7 +187,7 @@ class Term:
             args_list = []
 
             while True:
-                parsed_arg, remainder = Term._parse_prefix(remainder)
+                parsed_arg, remainder = Term._parse_prefix(remainder)   # <-- опечатка здесь, должно быть remainder
                 args_list.append(parsed_arg)
 
                 if not remainder:
