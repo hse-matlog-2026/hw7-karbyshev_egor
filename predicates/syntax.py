@@ -116,8 +116,8 @@ class Term:
         # Task 7.1
         if self.arguments is None:
             return self.root
-        else:
-            return self.root + '(' + ','.join(repr(arg) for arg in self.arguments) + ')'
+        args_repr = ','.join(repr(arg) for arg in self.arguments)
+        return f'{self.root}({args_repr})'
 
     def __eq__(self, other: object) -> bool:
         """Compares the current term with the given one.
@@ -162,31 +162,30 @@ class Term:
         """
         # Task 7.3a
         i = 0
-        while i < len(string) and string[i].isalnum():
+        while i < len(string) and (string[i].isalnum() or string[i] == '_'):
             i += 1
         if i == 0:
-            raise ValueError("Invalid term prefix")
-        name = string[:i]
-        if is_constant(name) or is_variable(name):
-            return Term(name), string[i:]
-        elif is_function(name):
-            assert string[i] == '('
-            i += 1
-            args = []
-            while True:
-                arg, rest = Term._parse_prefix(string[i:])
-                args.append(arg)
-                i = len(string) - len(rest)
-                if rest and rest[0] == ',':
-                    i += 1
-                elif rest and rest[0] == ')':
-                    i += 1
-                    break
-                else:
-                    raise ValueError("Malformed function term")
-            return Term(name, args), string[i:]
-        else:
             raise ValueError("Invalid term")
+        name = string[:i]
+        rest = string[i:]
+        if is_constant(name) or is_variable(name):
+            return Term(name), rest
+        if is_function(name):
+            if not rest or rest[0] != '(':
+                raise ValueError("Expected '(' after function name")
+            rest = rest[1:]
+            args = []
+            while rest and rest[0] != ')':
+                arg, rest = Term._parse_prefix(rest)
+                args.append(arg)
+                if rest and rest[0] == ',':
+                    rest = rest[1:]
+                elif not rest or rest[0] != ')':
+                    raise ValueError("Expected ',' or ')' in function arguments")
+            if not rest or rest[0] != ')':
+                raise ValueError("Unclosed function arguments")
+            return Term(name, args), rest[1:]
+        raise ValueError("Invalid term")
 
     @staticmethod
     def parse(string: str) -> Term:
@@ -200,7 +199,8 @@ class Term:
         """
         # Task 7.3b
         term, rest = Term._parse_prefix(string)
-        assert rest == ''
+        if rest != '':
+            raise ValueError("Unexpected trailing characters")
         return term
 
     def constants(self) -> Set[str]:
@@ -211,15 +211,11 @@ class Term:
         """
         # Task 7.5a
         if self.arguments is None:
-            if is_constant(self.root):
-                return {self.root}
-            else:
-                return set()
-        else:
-            consts = set()
-            for arg in self.arguments:
-                consts.update(arg.constants())
-            return consts
+            return {self.root} if is_constant(self.root) else set()
+        consts = set()
+        for arg in self.arguments:
+            consts.update(arg.constants())
+        return consts
 
     def variables(self) -> Set[str]:
         """Finds all variable names in the current term.
@@ -229,15 +225,11 @@ class Term:
         """
         # Task 7.5b
         if self.arguments is None:
-            if is_variable(self.root):
-                return {self.root}
-            else:
-                return set()
-        else:
-            vars_set = set()
-            for arg in self.arguments:
-                vars_set.update(arg.variables())
-            return vars_set
+            return {self.root} if is_variable(self.root) else set()
+        vars_set = set()
+        for arg in self.arguments:
+            vars_set.update(arg.variables())
+        return vars_set
 
     def functions(self) -> Set[Tuple[str, int]]:
         """Finds all function names in the current term, along with their
@@ -250,11 +242,10 @@ class Term:
         # Task 7.5c
         if self.arguments is None:
             return set()
-        else:
-            funcs = {(self.root, len(self.arguments))}
-            for arg in self.arguments:
-                funcs.update(arg.functions())
-            return funcs
+        funcs = {(self.root, len(self.arguments))}
+        for arg in self.arguments:
+            funcs.update(arg.functions())
+        return funcs
 
     def substitute(self, substitution_map: Mapping[str, Term],
                    forbidden_variables: AbstractSet[str] = frozenset()) -> Term:
@@ -442,15 +433,16 @@ class Formula:
         """
         # Task 7.2
         if is_equality(self.root):
-            return repr(self.arguments[0]) + '=' + repr(self.arguments[1])
-        elif is_relation(self.root):
-            return self.root + '(' + ','.join(repr(term) for term in self.arguments) + ')'
-        elif is_unary(self.root):
-            return self.root + repr(self.first)
-        elif is_binary(self.root):
-            return '(' + repr(self.first) + self.root + repr(self.second) + ')'
-        else:
-            return self.root + self.variable + '[' + repr(self.statement) + ']'
+            return f'{repr(self.arguments[0])}={repr(self.arguments[1])}'
+        if is_relation(self.root):
+            args_repr = ','.join(repr(term) for term in self.arguments)
+            return f'{self.root}({args_repr})'
+        if is_unary(self.root):
+            return f'~{repr(self.first)}'
+        if is_binary(self.root):
+            return f'({repr(self.first)}{self.root}{repr(self.second)})'
+        # quantifier
+        return f'{self.root}{self.variable}[{repr(self.statement)}]'
 
     def __eq__(self, other: object) -> bool:
         """Compares the current formula with the given one.
@@ -495,54 +487,79 @@ class Formula:
             that entire name (and not just a part of it, such as ``'f(y)=x1'``).
         """
         # Task 7.4a
-        if string[0] == '~':
-            first, rest = Formula._parse_prefix(string[1:])
-            return Formula('~', first), rest
-        elif string[0] == '(':
-            first, rest = Formula._parse_prefix(string[1:])
-            assert rest and is_binary(rest[0])
-            op = rest[0]
-            second, rest = Formula._parse_prefix(rest[1:])
-            assert rest and rest[0] == ')'
-            return Formula(op, first, second), rest[1:]
-        elif is_quantifier(string[0]):
-            quant = string[0]
-            i = 1
-            while i < len(string) and string[i].isalnum():
-                i += 1
-            var = string[1:i]
-            assert is_variable(var)
-            assert string[i] == '['
-            statement, rest = Formula._parse_prefix(string[i+1:])
-            assert rest and rest[0] == ']'
-            return Formula(quant, var, statement), rest[1:]
-        else:
-            term1, rest = Term._parse_prefix(string)
-            if rest and rest[0] == '=':
-                term2, rest = Term._parse_prefix(rest[1:])
-                return Formula('=', [term1, term2]), rest
-            elif rest and rest[0] == '(':
-                i = 0
-                while i < len(string) and string[i].isalnum():
-                    i += 1
-                rel = string[:i]
-                assert is_relation(rel)
-                assert string[i] == '('
-                args = []
-                rest = string[i+1:]
-                while True:
-                    arg, rest = Term._parse_prefix(rest)
-                    args.append(arg)
-                    if rest and rest[0] == ',':
-                        rest = rest[1:]
-                    elif rest and rest[0] == ')':
-                        rest = rest[1:]
-                        break
-                    else:
-                        raise ValueError("Malformed relation arguments")
-                return Formula(rel, args), rest
+        s = string.lstrip()
+        if not s:
+            raise ValueError("Empty formula string")
+        # Parenthesised formula or unary
+        if s[0] == '(':
+            inner, rest = Formula._parse_prefix(s[1:])
+            # Look for binary operator after inner
+            rest = rest.lstrip()
+            if rest and is_binary(rest[0]) and len(rest) >= 1:
+                op = rest[0]
+                right, rest = Formula._parse_prefix(rest[1:])
+                rest = rest.lstrip()
+                if not rest or rest[0] != ')':
+                    raise ValueError("Expected ')' after binary operator")
+                return Formula(op, inner, right), rest[1:]
+            elif rest and rest[0] == ')':
+                # Just a parenthesised formula without binary operator
+                return inner, rest[1:]
             else:
-                raise ValueError("Invalid formula prefix")
+                raise ValueError("Malformed parenthesised expression")
+        # Unary operator
+        elif s[0] == '~':
+            sub, rest = Formula._parse_prefix(s[1:])
+            return Formula('~', sub), rest
+        # Quantifier
+        elif is_quantifier(s[0]):
+            quant = s[0]
+            i = 1
+            while i < len(s) and s[i].isalnum():
+                i += 1
+            var = s[1:i]
+            if not is_variable(var):
+                raise ValueError("Invalid variable in quantifier")
+            if i >= len(s) or s[i] != '[':
+                raise ValueError("Expected '[' after quantifier variable")
+            sub, rest = Formula._parse_prefix(s[i+1:])
+            rest = rest.lstrip()
+            if not rest or rest[0] != ']':
+                raise ValueError("Expected ']' after quantified formula")
+            return Formula(quant, var, sub), rest[1:]
+        else:
+            # Try to parse a term followed by '=' or a relation
+            try:
+                term1, rest = Term._parse_prefix(s)
+                if rest and rest[0] == '=':
+                    term2, rest = Term._parse_prefix(rest[1:])
+                    return Formula('=', [term1, term2]), rest
+            except ValueError:
+                pass
+            # Parse relation name and arguments
+            i = 0
+            while i < len(s) and s[i].isalnum():
+                i += 1
+            if i == 0:
+                raise ValueError("Expected relation name")
+            rel = s[:i]
+            if not is_relation(rel):
+                raise ValueError(f"Invalid relation name: {rel}")
+            rest = s[i:]
+            if not rest or rest[0] != '(':
+                raise ValueError("Expected '(' after relation name")
+            rest = rest[1:]
+            args = []
+            while rest and rest[0] != ')':
+                arg, rest = Term._parse_prefix(rest)
+                args.append(arg)
+                if rest and rest[0] == ',':
+                    rest = rest[1:]
+                elif not rest or rest[0] != ')':
+                    raise ValueError("Expected ',' or ')' in relation arguments")
+            if not rest or rest[0] != ')':
+                raise ValueError("Unclosed relation arguments")
+            return Formula(rel, args), rest[1:]
 
     @staticmethod
     def parse(string: str) -> Formula:
@@ -556,7 +573,8 @@ class Formula:
         """
         # Task 7.4b
         formula, rest = Formula._parse_prefix(string)
-        assert rest == ''
+        if rest.strip() != '':
+            raise ValueError("Trailing characters after formula")
         return formula
 
     def constants(self) -> Set[str]:
